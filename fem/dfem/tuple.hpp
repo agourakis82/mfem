@@ -403,7 +403,9 @@ MFEM_HOST_DEVICE constexpr auto apply_op_helper(
    Op op,
    std::index_sequence<I...>)
 {
-   return tuple{op(get<I>(x), get<I>(y))...};
+   // Preserve CTAD's result type without an evaluated device deduction guide.
+   using result_type = decltype(tuple{op(get<I>(x), get<I>(y))...});
+   return result_type{op(get<I>(x), get<I>(y))...};
 }
 } // namespace detail
 
@@ -559,7 +561,8 @@ MFEM_HOST_DEVICE constexpr auto unary_minus_helper(
    const tuple<T...>& x,
    std::index_sequence<I...>)
 {
-   return tuple{-get<I>(x)...};
+   using result_type = decltype(tuple{-get<I>(x)...});
+   return result_type{-get<I>(x)...};
 }
 } // namespace detail
 
@@ -593,7 +596,8 @@ MFEM_HOST_DEVICE constexpr auto scalar_mult_helper(
    const tuple<T...>& x,
    std::index_sequence<I...>)
 {
-   return tuple{a * get<I>(x)...};
+   using result_type = decltype(tuple{a * get<I>(x)...});
+   return result_type{a * get<I>(x)...};
 }
 } // namespace detail
 
@@ -639,7 +643,8 @@ MFEM_HOST_DEVICE constexpr auto scalar_div_helper(
    scalar_t a,
    std::index_sequence<I...>)
 {
-   return tuple{get<I>(x) / a...};
+   using result_type = decltype(tuple{get<I>(x) / a...});
+   return result_type{get<I>(x) / a...};
 }
 } // namespace detail
 
@@ -673,7 +678,8 @@ MFEM_HOST_DEVICE constexpr auto scalar_div_inv_helper(
    const tuple<T...>& x,
    std::index_sequence<I...>)
 {
-   return tuple{a / get<I>(x)...};
+   using result_type = decltype(tuple{a / get<I>(x)...});
+   return result_type{a / get<I>(x)...};
 }
 } // namespace detail
 

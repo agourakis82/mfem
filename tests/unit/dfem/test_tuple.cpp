@@ -238,12 +238,49 @@ TEST_CASE("dFEM tuple arithmetic", "[dFEM]")
    }
 }
 
+TEST_CASE("dFEM tuple arithmetic result types", "[dFEM]")
+{
+   SECTION("reference results are copied into value elements")
+   {
+      const tuple2 x {1.0, vec3{{1.0, 2.0, 3.0}}};
+      const auto copy = mfem::future::detail::apply_op_helper(
+                           x, x,
+                           [](const auto& a, const auto&) -> const auto& { return a; },
+                           std::make_index_sequence<2> {});
+      static_assert(std::is_same<decltype(copy), const tuple2>::value,
+                    "operation results must decay as with by-value CTAD");
+      REQUIRE(get<0>(copy) == get<0>(x));
+      REQUIRE(get<1>(copy)(2) == get<1>(x)(2));
+      REQUIRE(&get<0>(copy) != &get<0>(x));
+      REQUIRE(&get<1>(copy) != &get<1>(x));
+   }
+
+   SECTION("empty tuples stay empty")
+   {
+      const tuple<> empty;
+      const auto result = empty + empty;
+      static_assert(std::is_same<decltype(result), const tuple<>>::value,
+                    "empty arithmetic must produce an empty tuple");
+      REQUIRE(std::tuple_size<decltype(result)>::value == 0);
+   }
+
+   SECTION("nested results preserve copy deduction")
+   {
+      const tuple<tuple<int, int>> x{tuple<int, int>{1, 2}};
+      const auto result = x + x;
+      static_assert(std::is_same<decltype(result), const tuple<int, int>>::value,
+                    "single-tuple results must keep the copy deduction candidate");
+      REQUIRE(get<0>(result) == 2);
+      REQUIRE(get<1>(result) == 4);
+   }
+}
+
 // The tuples are captured by value in device kernels, so exercise a round trip
 // through device memory: construct, mutate through structured bindings and read
 // back on the device.
 TEST_CASE("dFEM tuple on device", "[dFEM][GPU]")
 {
-   Vector res(4);
+   Vector res(14);
    auto d_res = res.Write();
 
    forall(1, [=] MFEM_HOST_DEVICE (int)
@@ -261,9 +298,25 @@ TEST_CASE("dFEM tuple on device", "[dFEM][GPU]")
       d_res[2] = get<1>(u)(1);
       d_res[3] = static_cast<real_t>(get<1>(t));
 
-      tuple2 v1{0_r, vec3{0_r, 0_r, 0_r}};
-      tuple2 v2{0_r, vec3{0_r, 0_r, 0_r}};
-      [[maybe_unused]] auto v = v1 + v2;
+      const tuple2 v1{2_r, vec3{2_r, 4_r, 8_r}};
+      const tuple2 v2{4_r, vec3{4_r, 8_r, 16_r}};
+      const auto sum = v1 + v2;
+      const auto negated = -v1;
+      const auto scaled = 2_r * v1;
+      const auto divided = v1 / 2_r;
+      const auto inverse = 8_r / v1;
+      static_assert(std::is_same<decltype(sum), const tuple2>::value, "");
+
+      d_res[4] = get<0>(sum);
+      d_res[5] = get<1>(sum)(2);
+      d_res[6] = get<0>(negated);
+      d_res[7] = get<1>(negated)(2);
+      d_res[8] = get<0>(scaled);
+      d_res[9] = get<1>(scaled)(2);
+      d_res[10] = get<0>(divided);
+      d_res[11] = get<1>(divided)(2);
+      d_res[12] = get<0>(inverse);
+      d_res[13] = get<1>(inverse)(2);
    });
 
    res.HostRead();
@@ -271,4 +324,14 @@ TEST_CASE("dFEM tuple on device", "[dFEM][GPU]")
    REQUIRE(std::as_const(res)(1) == 4.0_r);
    REQUIRE(std::as_const(res)(2) == 5.0_r);
    REQUIRE(std::as_const(res)(3) == 2.0_r);
+   REQUIRE(std::as_const(res)(4) == 6.0_r);
+   REQUIRE(std::as_const(res)(5) == 24.0_r);
+   REQUIRE(std::as_const(res)(6) == -2.0_r);
+   REQUIRE(std::as_const(res)(7) == -8.0_r);
+   REQUIRE(std::as_const(res)(8) == 4.0_r);
+   REQUIRE(std::as_const(res)(9) == 16.0_r);
+   REQUIRE(std::as_const(res)(10) == 1.0_r);
+   REQUIRE(std::as_const(res)(11) == 4.0_r);
+   REQUIRE(std::as_const(res)(12) == 4.0_r);
+   REQUIRE(std::as_const(res)(13) == 1.0_r);
 }
